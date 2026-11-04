@@ -2,3 +2,5 @@ pandas
 pillow
 pydantic
 python-dotenv
+numpy<2
+opencv-python<4.12
