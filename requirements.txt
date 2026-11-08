@@ -4,3 +4,7 @@ pydantic
 python-dotenv
 opencv-python
 numpy
+
+langchain
+langchain-core
+langchain-openai

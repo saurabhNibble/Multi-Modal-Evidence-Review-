@@ -1,12 +1,18 @@
 
 from pathlib import Path
+
 from src.data_loader import load_dataset
+from src.claim_extractor import extract_issue_types, extract_object_parts
+
 from PIL import Image
 import cv2
 import numpy as np
 
 
-# Project root directory
+# ==========================================
+# PROJECT ROOT DIRECTORY
+# ==========================================
+
 BASE_DIR = Path(__file__).resolve().parents[1]
 
 
@@ -24,128 +30,176 @@ def main():
 
     datasets = load_dataset()
 
-    # ==========================================
-    # INSPECT EVIDENCE REQUIREMENTS
-    # ==========================================
-
+    # Get evidence requirements dataset
     requirements_df = datasets["evidence_requirements"]
 
     print("\nEVIDENCE REQUIREMENTS")
     print("-" * 50)
 
-    # Display the first 11 rows of the evidence requirements DataFrame
-    # Convert the DataFrame into a readable string
-    # Hide the row index while printing
+    print(requirements_df.to_string(index=False))
 
-    print(requirements_df.head(11).to_string(index=False))
-    
-
-    # Get claims dataset
+    # Get customer claims dataset
     claims_df = datasets["claims"]
 
-    # Select the first customer claim
-    claim = claims_df.iloc[0]
+    # Count total claims
+    total_claims = len(claims_df)
 
-    # Get the customer's claim object
-    claim_object = claim["claim_object"]
-
-    # Filter evidence requirements for this object
-    object_requirements = requirements_df[
-        requirements_df["claim_object"] == claim_object
-    ]
-
-    print("\nREQUIREMENTS FOR THIS CLAIM OBJECT")
-    print(object_requirements.to_string(index=False))
+    print("\nTotal Claims to Process:", total_claims)
 
     # ==========================================
-    # 2. DISPLAY CUSTOMER CLAIM DETAILS
+    # 2. PROCESS ALL CUSTOMER CLAIMS
     # ==========================================
 
-    print("\nCUSTOMER CLAIM DETAILS")
-    print("-" * 30)
+    for index, claim in claims_df.iterrows():
 
-    print("User ID:", claim["user_id"])
-    print("Claim Object:", claim["claim_object"])
-    print("User Claim:", claim["user_claim"])
+        print("\n" + "=" * 50)
+        print(f"PROCESSING CLAIM {index + 1} / {total_claims}")
+        print("=" * 50)
 
-    # ==========================================
-    # 3. GET UPLOADED IMAGE PATHS
-    # ==========================================
+        # ==========================================
+        # 3. DISPLAY CUSTOMER CLAIM DETAILS
+        # ==========================================
 
-    image_paths = str(claim["image_paths"]).split(";")
+        user_id = claim["user_id"]
+        claim_object = claim["claim_object"]
+        user_claim = claim["user_claim"]
 
-    print("\nUPLOADED IMAGES")
-    print("-" * 30)
+        print("\nCUSTOMER CLAIM DETAILS")
+        print("-" * 40)
 
-    # ==========================================
-    # 4. PROCESS EACH IMAGE
-    # ==========================================
+        print("User ID:", user_id)
+        print("Claim Object:", claim_object)
+        print("User Claim:", user_claim)
 
-    for image_path in image_paths:
+        # ==========================================
+        # 4. CLAIM EXTRACTION
+        # ==========================================
 
-        image_path = image_path.strip()
+        detected_issues = extract_issue_types(user_claim)
 
-        if not image_path:
+        detected_parts = extract_object_parts(
+        user_claim,
+        claim_object
+        )
+
+        print("\nCLAIM EXTRACTION RESULTS")
+        print("-" * 40)
+
+        print("Detected Issues:", detected_issues)
+        print("Detected Parts:", detected_parts)
+
+        # ==========================================
+        # 5. FILTER EVIDENCE REQUIREMENTS
+        # ==========================================
+
+        # Get requirements for the current object.
+        # Also include general requirements that apply to all objects.
+
+        object_requirements = requirements_df[
+            requirements_df["claim_object"].isin(
+                ["all", claim_object]
+            )
+        ]
+
+        print("\nREQUIREMENTS FOR THIS CLAIM OBJECT")
+        print("-" * 40)
+
+        print(object_requirements.to_string(index=False))
+
+        print("\nAVAILABLE EVIDENCE CATEGORIES")
+
+        for requirement in object_requirements["applies_to"]:
+            print("-", requirement)
+
+        # ==========================================
+        # 6. GET UPLOADED IMAGE PATHS
+        # ==========================================
+
+        image_paths_value = claim["image_paths"]
+
+        print("\nUPLOADED IMAGES")
+        print("-" * 40)
+
+        if not isinstance(image_paths_value, str):
+            print("No valid image paths found.")
             continue
 
-        full_path = BASE_DIR / "dataset" / image_path
+        image_paths = image_paths_value.split(";")
 
-        if not full_path.exists():
+        # ==========================================
+        # 7. PROCESS EACH IMAGE
+        # ==========================================
 
-            print("\nImage not found:", full_path)
-            continue
+        for image_path in image_paths:
 
-        print("\nImage found:", full_path)
+            image_path = image_path.strip()
 
-        try:
+            if not image_path:
+                continue
 
-            # Open image using Pillow
-            image = Image.open(full_path)
+            full_path = BASE_DIR / "dataset" / image_path
 
-            print("Image Format:", image.format)
-            print("Image Size:", image.size)
+            if not full_path.exists():
 
-            # ==========================================
-            # 5. CHECK IMAGE RESOLUTION
-            # ==========================================
+                print("\nImage not found:", full_path)
+                continue
 
-            width, height = image.size
+            print("\nImage found:", full_path)
 
-            print("Width:", width)
-            print("Height:", height)
+            try:
 
-            if width < 500 or height < 500:
-                print("Warning: Low-resolution image")
-            else:
-                print("Image resolution looks acceptable")
+                # Open image using Pillow
+                with Image.open(full_path) as image:
 
-            # ==========================================
-            # 6. DETECT BLUR
-            # ==========================================
+                    print("Image Format:", image.format)
+                    print("Image Size:", image.size)
 
-            # Convert image into grayscale NumPy array
-            gray = np.array(image.convert("L"))
+                    # ==========================================
+                    # 8. CHECK IMAGE RESOLUTION
+                    # ==========================================
 
-            # Calculate Laplacian variance
-            blur_score = cv2.Laplacian(
-                gray,
-                cv2.CV_64F
-            ).var()
+                    width, height = image.size
 
-            print("Blur Score:", round(blur_score, 2))
+                    print("Width:", width)
+                    print("Height:", height)
 
-            # Basic blur classification
-            if blur_score < 100:
-                print("Warning: Image may be blurry")
-            else:
-                print("Image appears sharp")
+                    if width < 500 or height < 500:
+                        print("Warning: Low-resolution image")
+                    else:
+                        print("Image resolution looks acceptable")
 
-        except Exception as e:
+                    # ==========================================
+                    # 9. DETECT IMAGE BLUR
+                    # ==========================================
 
-            print("Error processing image:", e)
+                    # Convert image to grayscale
+                    gray = np.array(image.convert("L"))
+
+                    # Calculate Laplacian variance
+                    blur_score = cv2.Laplacian(
+                        gray,
+                        cv2.CV_64F
+                    ).var()
+
+                    print("Blur Score:", round(blur_score, 2))
+
+                    # Initial blur classification
+                    if blur_score < 100:
+                        print("Warning: Image may be blurry")
+                    else:
+                        print("Image appears sharp")
+
+            except Exception as e:
+
+                print("Error processing image:", e)
+
+    # ==========================================
+    # 10. PROCESSING COMPLETED
+    # ==========================================
 
     print("\n" + "=" * 50)
-    print("IMAGE PROCESSING COMPLETED")
+    print("ALL CLAIMS PROCESSED SUCCESSFULLY")
+    print("Total Claims:", total_claims)
     print("=" * 50)
 
 
