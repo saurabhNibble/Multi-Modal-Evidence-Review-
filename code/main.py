@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from src.data_loader import load_dataset
-from src.claim_extractor import extract_issue_types, extract_object_parts
+from code.src.llm_claim_extractor import extract_issue_types, extract_object_parts
 
 from PIL import Image
 import cv2
